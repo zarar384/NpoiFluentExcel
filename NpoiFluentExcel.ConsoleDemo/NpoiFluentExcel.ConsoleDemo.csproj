@@ -7,4 +7,18 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <None Remove="Resources\company-logo.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Resources\company-logo.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NpoiFluentExcel\NpoiFluentExcel.csproj" />
+  </ItemGroup>
+
 </Project>

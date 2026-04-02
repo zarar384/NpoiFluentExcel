@@ -144,6 +144,18 @@ namespace NpoiFluentExcel.Styling
                     WriteCellSafe(row, index, (double)i, style ?? Integer);
                     break;
 
+                case decimal m:
+                    WriteCellSafe(row, index, (double)m, style ?? Number);
+                    break;
+
+                case long l:
+                    WriteCellSafe(row, index, (double)l, style ?? Integer);
+                    break;
+
+                case float f: 
+                    WriteCellSafe(row, index, (double)f, style ?? Number);
+                    break;
+
                 case DateTime dt:
                     WriteCellSafe(row, index, dt, style ?? Date);
                     break;

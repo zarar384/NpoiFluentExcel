@@ -272,38 +272,98 @@ namespace NpoiFluentExcel.Builders
 
         public IExcelFinalStage AddTableStyle(string name = "TableStyleDark9", bool disableAutoFilter = false)
         {
-            if (_isTableStyleApplied || !(_sheet is XSSFSheet xssf))
+            if (_isTableStyleApplied)
+                return this;
+
+            if (!(_sheet is XSSFSheet xssfSheet))
                 return this;
 
             var headerRow = _sheet.GetRow(_headerRowIndex);
-            if (headerRow == null)
+            if (headerRow == null || _sheet.LastRowNum < _headerRowIndex + 1)
                 return this;
 
-            int colCount = _columns.Count(c => c.IsEnabled());
-            if (colCount == 0)
+            int visibleColumnCount = _columns.Count(c => c.IsEnabled());
+            if (visibleColumnCount == 0)
                 return this;
 
-            int lastRow = _sheet.LastRowNum;
-            int lastCol = _startColumn + colCount - 1;
+            int lastRowIndex = _sheet.LastRowNum;
+            int lastColIndex = _startColumn + visibleColumnCount - 1;
+            if (lastColIndex < 0)
+                return this;
 
-            var table = xssf.CreateTable();
-            var ct = table.GetCTTable();
+            var tableId = xssfSheet.Workbook.GetNextTableId();
+            string tableName = $"Table{tableId}";
+
+            var isCelkemRowExists = _columns.Any(c => c.IsEnabled() && c.IsSum);
+
+            var table = xssfSheet.CreateTable();
+            var ctTable = table.GetCTTable();
+
+            var tableEndRow = isCelkemRowExists ? lastRowIndex - 1 : lastRowIndex;
 
             var area = new AreaReference(
                 new CellReference(_headerRowIndex, _startColumn),
-                new CellReference(lastRow, lastCol));
+                new CellReference(tableEndRow, lastColIndex) // isCelkemRowExists ? lastColIndex - 1 : 
+            );
 
-            ct.@ref = area.FormatAsString();
-            ct.id = xssf.Workbook.GetNextTableId();
-            ct.name = $"Table{ct.id}";
-            ct.displayName = ct.name;
-            ct.headerRowCount = 1;
+            ctTable.@ref = area.FormatAsString();
+            ctTable.id = tableId;
+            ctTable.name = tableName;
+            ctTable.displayName = tableName;
+            ctTable.headerRowCount = 1;
 
-            ct.tableStyleInfo = new CT_TableStyleInfo
+            // TODO doesnt work
+            //ctTable.totalsRowShown = isCelkemRowExists;
+            //ctTable.totalsRowCount = isCelkemRowExists ? 1U : 0U;
+
+            ctTable.tableStyleInfo = new CT_TableStyleInfo
             {
                 name = name,
-                showRowStripes = true
+                showRowStripes = true,
+                showColumnStripes = false
             };
+
+            var tableColumns = new CT_TableColumns
+            {
+                count = (uint)visibleColumnCount,
+                tableColumn = new List<CT_TableColumn>()
+            };
+
+
+            var headerNames = new List<string>();
+            for (int i = 0; i < visibleColumnCount; i++)
+            {
+                int colIndex = _startColumn + i;
+
+                headerNames.Add(headerRow.GetCell(colIndex)?.ToString() ?? $"Column{i + 1}");
+            }
+
+            var isHeaderWithDuplicate = headerNames.GroupBy(h => h)
+                .Any(g => g.Count() > 1);
+
+            if (isHeaderWithDuplicate)
+                throw new Exception($"Sheet contains duplicate column headers. Table style cannot be applied. Headers: {string.Join(", ", headerNames)}");
+
+            for (int i = 0; i < headerNames.Count; i++)
+            {
+                var column = new CT_TableColumn
+                {
+                    id = (uint)(i + 1),
+                    name = headerNames[i]
+                };
+
+                tableColumns.tableColumn.Add(column);
+            }
+
+            ctTable.tableColumns = tableColumns;
+
+            if (!disableAutoFilter)
+            {
+                ctTable.autoFilter = new CT_AutoFilter
+                {
+                    @ref = area.FormatAsString(),
+                };
+            }
 
             _isTableStyleApplied = true;
             return this;
