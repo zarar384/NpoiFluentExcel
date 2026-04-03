@@ -54,7 +54,7 @@ namespace NpoiFluentExcel.Extensions
             where TDto : class, new()
         {
             if (workbook == null)
-                throw new InvalidOperationException("Workbook is not initialized.");
+                throw new ArgumentNullException("Workbook is not initialized.");
 
             var type = typeof(TDto);
 
@@ -72,50 +72,44 @@ namespace NpoiFluentExcel.Extensions
                 .Where(x => x.Attr != null)
                 .ToArray();
 
-            if (!columns.Any())
+            if (columns.Length == 0)
                 throw new InvalidOperationException(
                     $"DTO '{type.Name}' does not contain any properties with ColumnAttribute.");
 
-            try
-            {
-                var table = workbook.AddSheet<TDto>(sheetAttr.SheetName);
+            var table = workbook.AddSheet<TDto>(sheetAttr.SheetName);
 
-                foreach (var (prop, attr) in columns)
+            foreach (var (prop, attr) in columns)
+            {
+                var getter = prop.GetGetMethod();
+                if (getter == null || !getter.IsPublic)
+                    throw new InvalidOperationException(
+                        $"Property '{prop.Name}' in DTO '{type.Name}' does not have a public getter.");
+
+                if (string.IsNullOrWhiteSpace(attr.ColumnName))
+                    throw new InvalidOperationException(
+                        $"Property '{prop.Name}' in DTO '{type.Name}' has an empty column name.");
+
+                try
                 {
-                    if (!prop.CanRead)
-                        throw new InvalidOperationException(
-                            $"Property '{prop.Name}' in DTO '{type.Name}' does not have a getter.");
-
-                    if (string.IsNullOrWhiteSpace(attr.ColumnName))
-                        throw new InvalidOperationException(
-                            $"Property '{prop.Name}' in DTO '{type.Name}' has an empty column name.");
-
-                    try
-                    {
-                        table.AddColumn(
-                            attr.ColumnName,
-                            dto => prop.GetValue(dto),
-                            attr.CellStyle,
-                            () => attr.Include);
-                    }
-                    catch (Exception ex)
-                    {
-                        throw new InvalidOperationException(
-                            $"DTO '{type.Name}': failed to map column '{attr.ColumnName}' to property '{prop.Name}'. Error: {ex.Message}");
-                    }
+                    table.AddColumn(
+                        attr.ColumnName,
+                        dto => prop.GetValue(dto),
+                        attr.CellStyle,
+                        () => attr.Include);
                 }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        $"DTO '{type.Name}': failed to map column '{attr.ColumnName}' to property '{prop.Name}'. Error: {ex.Message}");
+                }
+            }
 
-                return table;
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException(
-                    $"Unexpected error while generating sheet for DTO '{type.Name}'.", ex);
-            }
+            return table;
         }
 
         /// <summary>
         /// Removes empty sheets from the workbook.
+        /// Sheets with only a single row (row 0) are also considered empty.
         /// </summary>
         public static void DeleteEmptySheets(this XSSFWorkbook workbook)
         {
